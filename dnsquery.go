@@ -2,6 +2,7 @@ package dnsquery
 
 import (
 	"bufio"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -46,4 +47,26 @@ func Run() error {
 	}
 	fmt.Println("Finished")
 	return nil
+}
+
+// MakeQuestionHeader prepends a DNS query ID to a DNS query header.
+// https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.1
+func MakeQuestionHeader(queryID uint16) []byte {
+	var header []byte
+	parts := []uint16{
+		queryID,
+		0x0100, // flags
+		0x0001, // num of questions
+		0x0000, // num answers
+		0x0000, // num auth
+		0x0000, // num additional
+	}
+	for _, b := range parts {
+		header = binary.BigEndian.AppendUint16(header, b)
+	}
+	return header
+}
+
+func EncodeDomainName(domainName string) string {
+	return ""
 }
