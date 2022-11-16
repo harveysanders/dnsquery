@@ -2,6 +2,7 @@ package dnsquery
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -67,6 +68,62 @@ func MakeQuestionHeader(queryID uint16) []byte {
 	return header
 }
 
+// EncodeDomainName splits a domain name the QNAME for the DNS Query.
+// A QNAME is "a domain name represented as a sequence of labels, where
+// each label consists of a length octet followed by that
+// number of octets.  The domain name terminates with the
+// zero length octet for the null label of the root.  Note
+// that this field may be an odd number of octets; no
+// padding is used."
+// https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.2
 func EncodeDomainName(domainName string) string {
-	return ""
+	parts := strings.Split(domainName, ".")
+	var res strings.Builder
+	for _, p := range parts {
+		res.WriteByte(byte(len(p)))
+		res.WriteString(p)
+	}
+	res.WriteByte(byte(0))
+	return res.String()
+}
+
+// EncodeRecordType returns the int value for a given DNS record type.
+func EncodeRecordType(queryType string) (uint16, error) {
+	// https://en.wikipedia.org/wiki/List_of_DNS_record_types
+	typeMap := map[string]uint16{
+		"A":    1,  // Address
+		"AAAA": 28, // IPv6
+		"MX":   15, // Mail Server
+		"NS":   2,  // Name Server
+		"TXT":  16, // Text
+	}
+
+	v, ok := typeMap[queryType]
+	if !ok {
+		return 0, fmt.Errorf("no record type found for: %q", queryType)
+	}
+	return v, nil
+}
+
+func MakeDNSQuery(domain, queryType string, queryID uint16) ([]byte, error) {
+	query := new(bytes.Buffer)
+
+	// Write header bytes
+	header := MakeQuestionHeader(queryID)
+	binary.Write(query, binary.BigEndian, header)
+
+	// Write domain name
+	edn := EncodeDomainName(domain)
+	binary.Write(query, binary.BigEndian, []byte(edn))
+
+	// Write query type
+	qType, err := EncodeRecordType(queryType)
+	if err != nil {
+		return query.Bytes(), err
+	}
+	binary.Write(query, binary.BigEndian, qType)
+
+	// Write query class (1 for IN, INternet)
+	binary.Write(query, binary.BigEndian, uint16(1))
+	return query.Bytes(), nil
 }
